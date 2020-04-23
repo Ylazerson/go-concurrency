@@ -204,3 +204,272 @@ Goroutines free us from having to think about our problem space in terms of para
 Chapter 3. Go’s Concurrency Building Blocks
 </h2>
 
+
+<h4 style="text-align: center; color:red">
+Goroutines
+</h4>
+
+
+- Every Go program has at least one goroutine: the main goroutine, which is automatically created and started when the process begins.
+
+-  A goroutine is a function that is running concurrently (remember: not necessarily in parallel!) alongside other code.
+
+**Example 1.a:**
+```go
+func main() {
+    go sayHello()
+    // continue doing other things
+}
+
+func sayHello() {
+    fmt.Println("hello")
+}
+```
+
+**Example 1.b - same but using an *anonymous function:***
+```go
+go func() {
+    fmt.Println("hello")
+}()
+
+// continue doing other things
+```
+
+
+**Example 1.c - same but assign the function to a variable:**
+```go
+sayHello := func() {
+    fmt.Println("hello")
+}
+
+go sayHello()
+
+// continue doing other things
+```
+
+---
+
+**That's all folks to get started! What follows are some more behind-the-scenes details.**
+
+![](img/go-1.png)
+![](img/go-2.png)
+![](img/go-4.png)
+![](img/go-5.png)
+
+---
+
+**Goroutines with Closures**
+
+Closures close around the lexical scope they are created in, thereby capturing variables.
+
+```go
+var wg sync.WaitGroup
+
+salutation := "hello"
+
+wg.Add(1)
+
+go func() {
+    defer wg.Done()
+    salutation = "welcome" 
+}()
+
+wg.Wait()
+
+fmt.Println(salutation)
+```
+
+- Goroutines execute within the same address space they were created in, and so our program prints out the word “welcome”
+
+`OUTPUT: welcome`
+
+---
+
+![](img/closure-no.png)
+
+---
+
+![](img/closure-yes.png)
+
+---
+
+![](img/csp-vs-sync.png)
+
+---
+---
+
+![](img/cooool.png)
+
+---
+
+![](img/go-collect.png)
+
+- Actually even smaller now.
+
+- On my laptop I have 8 GB of RAM, which means that in theory I can spin up **millions** of goroutines without requiring swapping.
+
+
+
+
+
+---
+<h4 style="text-align: center; color:red">
+The sync Package
+</h4>
+
+![](img/sync.png)
+
+
+
+
+<h5 style="text-align: center; color:purple">
+sync.WaitGroup
+</h5>
+
+- `WaitGroup` is a great way to wait for a **set** of concurrent operations to complete when you either 
+    - don’t care about the result of the concurrent operation, or 
+    - you have other means of collecting their results. 
+- If neither of those conditions are true, I suggest you use `channels` and a `select` statement instead.
+
+![](img/waitgroup.png)
+![](img/waitgroup-2.png)
+
+
+---
+<h5 style="text-align: center; color:purple">
+sync.Mutex 
+</h5>
+
+![](img/mutex.png)
+
+```go
+var count int
+var lock sync.Mutex
+
+increment := func() {
+    lock.Lock()                 
+    defer lock.Unlock()         
+    count++
+    fmt.Printf("Incrementing: %d\n", count)
+}
+
+decrement := func() {
+    lock.Lock()                 
+    defer lock.Unlock()         
+    count--
+    fmt.Printf("Decrementing: %d\n", count)
+}
+
+// Increment
+var arithmetic sync.WaitGroup
+for i := 0; i <= 5; i++ {
+    arithmetic.Add(1)
+    go func() {
+        defer arithmetic.Done()
+        increment()
+    }()
+}
+
+// Decrement
+for i := 0; i <= 5; i++ {
+    arithmetic.Add(1)
+    go func() {
+        defer arithmetic.Done()
+        decrement()
+    }()
+}
+
+arithmetic.Wait()
+fmt.Println("Arithmetic complete.")
+```
+
+![](img/mutex-2.png)
+
+
+
+---
+<h5 style="text-align: center; color:purple">
+sync.RWMutex
+</h5>
+
+![](img/rwmutex.png)
+
+
+
+
+---
+<h5 style="text-align: center; color:purple">
+sync.NewCond
+</h5>
+
+- A **`Cond`** is a rendezvous point for goroutines waiting for or announcing the occurrence of an event.
+- An “event” is any arbitrary signal between two or more goroutines that carries no information other than the fact that it has occurred. 
+- See book's repo for example code, if needed.
+
+
+
+
+---
+<h5 style="text-align: center; color:purple">
+sync.Once
+</h5>
+
+As the name implies, `sync.Once` is a type that utilizes some sync primitives internally to ensure that only one call to `Do` ever calls the function passed in — even on different goroutines.
+- See book's repo for example code, if needed.
+
+
+
+
+---
+<h5 style="text-align: center; color:purple">
+sync.Pool
+</h5>
+
+![](img/pool.png)
+
+- See book's repo for example code, if needed.
+
+
+
+
+
+
+---
+<h4 style="text-align: center; color:red">
+Channels
+</h4>
+
+
+- While they can be used to synchronize access of the memory, **they are best used to communicate information between goroutines**. 
+
+- Channels are extremely useful in programs of any size because of their ability to be composed together. 
+
+- Like a river, a channel serves as a conduit for a stream of information; values may be passed along the channel, and then read out downstream. 
+
+- For this reason I usually end my `chan` variable names with the word `Stream`. 
+
+- The disparate parts of your program don’t require knowledge of each other, only a reference to the same place in memory where the channel resides. This can be done by passing references of channels around your program.
+
+---
+
+```go
+// Declare channel:
+var dataStream chan interface{} 
+
+// Instantiate channel:
+dataStream = make(chan interface{}) 
+```
+
+---
+
+![](img/channels.png)
+
+---
+
+![](img/channels-2.png)
+
+---
+
+You can't write a value onto a read-only channel, read a value from a write-only channel. 
+- You'll get an error at **compile time**.
+- As we’ll see later in this section, this is a powerful way to make declarations about our API and to build composable, logical programs that are easy to reason about.
