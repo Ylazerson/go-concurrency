@@ -613,7 +613,63 @@ Unbuffered channels are also defined in terms of buffered channels: an unbuffere
 
 Remember that when we discussed blocking, we said that writes to a channel block if a channel is full, and reads from a channel block if the channel is empty? 
 - “Full” and “empty” are functions of the **capacity, or buffer size**. 
-- An **unbuffered** channel has a capacity of zero and so it’s already full before any writes. 
+- An **unbuffered** channel has a capacity of zero and so it’s already full before any writes.
+    - Hence a write will to it **will block** until "someone" takes that value:
+
+```go
+
+	// See: https://programming.guide/go/format-parse-string-time-date-example.html
+	const formatStr string = "03:04:05 PM"
+
+	var stdoutBuff bytes.Buffer
+	defer stdoutBuff.WriteTo(os.Stdout)
+
+	intStream := make(chan int, 0)
+
+	go func() {
+		defer close(intStream)
+
+		var vInt int = 99
+
+		fmt.Fprintf(
+			&stdoutBuff,
+			"Sending at %s: %d\n",
+			time.Now().Format(formatStr),
+			vInt,
+		)
+
+		intStream <- vInt
+
+		fmt.Fprintf(
+			&stdoutBuff,
+			"See I was blocked. Time is now %s:\n",
+			time.Now().Format(formatStr),
+		)
+
+	}()
+
+	time.Sleep(5 * time.Second)
+
+	fmt.Fprintf(
+		&stdoutBuff,
+		"Receiving at %s: %d\n",
+		time.Now().Format(formatStr),
+		<-intStream,
+	)
+
+	time.Sleep(5 * time.Second)
+
+```
+
+**OUTPUT**
+```
+Sending at 02:10:58 PM: 99
+Receiving at 02:11:03 PM: 99
+See I was blocked. Time is now 02:11:03 PM:
+```
+
+---
+
 - A **buffered** channel with no receivers and a capacity of four would be full after four writes, and block on the fifth write since it has nowhere else to place the fifth element. 
 - In this way, buffered channels are an in-memory FIFO queue for concurrent processes to communicate over.
 
@@ -714,8 +770,9 @@ Write Operation
 | `nil`             | Block             |
 | Open and Full     | Block             |
 | Open and Not Full | Write Value       |
-| Closed            | panic             |
+| Closed            | Panic             |
 | Receive Only      | Compilation Error |
+
 
 <h5 style="text-align: center; color:brown">
 Close Operation
@@ -728,3 +785,185 @@ Close Operation
 |Open and Empty|Closes Channel; reads produces default value|
 |Closed|panic|
 |Receive Only|Compilation Error|
+
+
+**At first glance**, it looks as though channels might be dangerous to utilize, but after examining the motivation of these results and framing the use of channels, it becomes less scary and begins to make a lot of sense. 
+
+#### What To Do: Assign Channel Ownership
+
+The **goroutine** that owns a **channel** should:
+- Responsibility 1 (**O-R1**): **Instantiate** the channel.
+- Responsibility 2 (**O-R2**): **Perform** writes, or pass ownership to another goroutine.
+- Responsibility 3 (**O-R3**): **Close** the channel.
+    
+Much like memory in languages without garbage collection, it’s important to clarify which **goroutine** owns a **channel** in order to reason about our programs logically. 
+    
+**Unidirectional channel** declarations will be very helpful now:  
+- **channel owners** get a **write-access** view into the channel (`chan` or `chan<-`) 
+- **channel utilizers** only get a **read-only** view into the channel (`<-chan`)
+
+
+Now, as a consumer of a channel, I only have to worry about two things:
+- Responsibility 1 (**R-R1**): Knowing when a channel is closed.
+    - To address this simply examine the second return value from the read operation.
+- Responsibility 2 (**R-R2**): Responsibly handling blocking for any reason.
+    - This will depend on your algorithm: you may want to time out, you may want to stop reading when someone tells you to, or you may just be content to block for the lifetime of the process. 
+    - **The important thing is that as a consumer you should handle the fact that reads can and will block.**
+    - We’ll examine this further in the next chapter.
+
+---
+
+Let's show a clear example:
+
+```go
+chanOwner := func() <-chan int {
+
+    // We’ll produce 6 results, so create a buffered channel of 5 so
+    // that the goroutine can complete as quickly as possible.
+    //
+    // O-R1
+    resultStream := make(chan int, 5)
+
+    // Notice that we’ve inverted how we create goroutines.
+    // It is now encapsulated within the surrounding function.
+    go func() {
+
+        // O-R3
+        defer close(resultStream)
+
+        // O-R2
+        for i := 0; i <= 5; i++ {
+            resultStream <- i
+        }
+    }()
+
+    // Since the return value is declared as a read-only channel,
+    // resultStream will implicitly be converted to read-only for consumers
+    return resultStream
+}
+
+resultStream := chanOwner()
+
+// R-R1 and R-R2:
+for result := range resultStream {
+    fmt.Printf("Received: %d\n", result)
+}
+
+fmt.Println("Done receiving!")
+```
+
+**RESULT:**
+```
+Received: 0
+Received: 1
+Received: 2
+Received: 3
+Received: 4
+Received: 5
+Done receiving!
+```
+
+**Just like above example, try to keep the scope of channel ownership small so that these things remain obvious**. 
+
+
+
+---
+<h4 style="text-align: center; color:red">
+Select
+</h4>
+
+- **Channels** are the glue that binds **goroutines** together.
+- The **`select`** statement is the glue that binds **channels** together. 
+- **`select`** statements are one of the most crucial things in concurrency. 
+
+
+Some notes:
+- Unlike `switch` blocks, `case` statements in a `select` block **aren’t** tested sequentially, and execution won’t automatically fall through if none of the criteria are met.
+- Instead, all channel reads and writes are considered **simultaneously** to see if any of them are ready: populated or closed channels in the case of reads, and channels that are not at capacity in the case of writes. 
+- The Go runtime will perform a pseudo-random uniform selection over the set of case statements. This just means that of your set of `case` statements, each has an **equal** chance of being selected as all the others.
+- If none of the channels are ready, the entire select statement blocks. Then when one the channels is ready, that operation will proceed, and its corresponding statements will execute.
+
+---
+
+If there’s nothing useful you can do when all the channels are blocked, but you also can’t block forever, you may want to time out. 
+- The `time.After` function takes in a `time.Duration` argument and returns a **channel** that will send the current time after the duration you provide it. 
+
+```go
+var c <-chan int
+
+select {
+    // 1st case statement will never become unblocked because we’re reading from a nil channel.
+    case <-c: 
+    case <-time.After(1 * time.Second):
+        fmt.Println("Timed out.")
+}
+
+// RESULT: "Timed out."
+```
+
+
+---
+
+The `select` statement also allows for a `default` clause in case you’d like to do something if all the channels you’re selecting against are blocking. 
+
+```go
+start := time.Now()
+
+var c1, c2 <-chan int
+
+select {
+    case <-c1:
+    case <-c2:
+    default:
+        fmt.Printf("In default after %v\n\n", time.Since(start))
+}
+
+// RESULT: "In default after 713ns"
+```
+
+---
+
+Usually you’ll see a `default` clause used in conjunction with a `for-select` loop. 
+- This allows a goroutine to make progress on work while waiting for another goroutine to report a result.
+
+```go
+doneStream := make(chan interface{})
+
+go func() {
+    time.Sleep(5 * time.Second)
+    close(doneStream)
+}()
+
+
+// -- ---------------------------
+workCounter := 0
+
+loop:
+for {
+    select {
+    case <-doneStream:
+        break loop
+    default:
+    }
+
+    // Simulate work
+    workCounter++
+    time.Sleep(1 * time.Second)
+}
+
+// -- ---------------------------
+fmt.Printf("Achieved %v cycles of work before signalled to stop.\n", workCounter)
+
+// RESULT: "Achieved 5 cycles of work before signalled to stop."
+```
+
+
+
+---
+<h4 style="text-align: center; color:red">
+The GOMAXPROCS Lever
+</h4>
+
+Go already automatically sets `GOMAXPROCS` tp the number of logical CPUs on the host machine.
+
+Do not tweak `GOMAXPROCS`; it will likely do more harm than good.

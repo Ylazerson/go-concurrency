@@ -8,28 +8,35 @@ go run main.go
 package main
 
 import (
-	"bytes"
 	"fmt"
-	"os"
+	"time"
 )
 
 func main() {
 
-	var stdoutBuff bytes.Buffer
-	defer stdoutBuff.WriteTo(os.Stdout)
+	doneStream := make(chan interface{})
 
-	intStream := make(chan int, 4)
 	go func() {
-		defer close(intStream)
-		defer fmt.Fprintln(&stdoutBuff, "Producer Done.")
-		for i := 0; i < 5; i++ {
-			fmt.Fprintf(&stdoutBuff, "Sending: %d\n", i)
-			intStream <- i
-		}
+		time.Sleep(5 * time.Second)
+		close(doneStream)
 	}()
 
-	for integer := range intStream {
-		fmt.Fprintf(&stdoutBuff, "Received %v.\n", integer)
+	workCounter := 0
+
+loop:
+	for {
+		select {
+		case <-doneStream:
+			break loop
+		default:
+		}
+
+		// Simulate work
+		workCounter++
+		time.Sleep(1 * time.Second)
 	}
 
+	fmt.Printf("Achieved %v cycles of work before signalled to stop.\n", workCounter)
 }
+
+// RESULT: "Achieved 5 cycles of work before signalled to stop."
