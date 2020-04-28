@@ -30,8 +30,7 @@ Chapter 1. An Introduction to Concurrency
 
 
 #### Amdahl’s law
-- Amdahl’s law describes a way in which to model the potential performance gains from implementing the solution to a problem in a parallel manner. 
-- Simply put, it states that the gains are bounded by how much of the program must be written in a sequential manner.
+- Simply put, it states that the gains are **bounded** by how much of the program must be written in a sequential manner.
 
 
 ---
@@ -65,7 +64,7 @@ Chapter 1. An Introduction to Concurrency
 
 3. **Memory Access Synchronization**
 
-    - There’s a name for a section of your program that needs exclusive access to a shared resource. This is called a **critical section**.
+    - There’s a name for a section of your program that needs **exclusive** access to a shared resource. This is called a **critical section**.
 
 4. **Deadlocks**    
     
@@ -103,9 +102,9 @@ Chapter 1. An Introduction to Concurrency
 
     - In my opinion, livelocks are more difficult to spot than deadlocks simply because it can appear as if the program is doing work.
 
-    - Livelocks are a subset of a larger set of problems called starvation. We’ll look at that next.
+    - Livelocks are a subset of a larger set of problems called **starvation**. We’ll look at that next.
 
-6. Starvation
+6. **Starvation**
     - Starvation is any situation where a concurrent process cannot get all the resources it needs to perform work.
 
     -  Livelocks warrant discussion separate from starvation because in a livelock, all the concurrent processes are starved equally, and no work is accomplished. More broadly, starvation usually implies that there are one or more greedy concurrent process that are unfairly preventing one or more concurrent processes from accomplishing work as efficiently as possible, or maybe at all.
@@ -190,7 +189,10 @@ Goroutines free us from having to think about our problem space in terms of para
 ![](img/when-2.png)
 
 
-**Go’s philosophy on concurrency can be summed up like this: aim for simplicity, use channels when possible, and treat goroutines like a free resource.**
+**Go’s philosophy on concurrency can be summed up like this**: 
+1. aim for simplicity
+2. use channels when possible
+3. treat goroutines like a free resource
 
 
 
@@ -260,7 +262,7 @@ go sayHello()
 
 **Goroutines with Closures**
 
-Closures close around the lexical scope they are created in, thereby capturing variables.
+Closures **close** around the lexical scope they are created in, thereby **capturing variables**.
 
 ```go
 var wg sync.WaitGroup
@@ -279,7 +281,7 @@ wg.Wait()
 fmt.Println(salutation)
 ```
 
-- Goroutines execute within the same address space they were created in, and so our program prints out the word “welcome”
+- Goroutines execute within the same **address space** they were created in, and so our program prints out the word “welcome”
 
 `OUTPUT: welcome`
 
@@ -326,10 +328,10 @@ The sync Package
 sync.WaitGroup
 </h5>
 
-- `WaitGroup` is a great way to wait for a **set** of concurrent operations to complete when you either 
+- `WaitGroup` is a great way to wait for a **set** of concurrent operations to complete when you **either**: 
     - don’t care about the result of the concurrent operation, or 
     - you have other means of collecting their results. 
-- If neither of those conditions are true, I suggest you use `channels` and a `select` statement instead.
+- If neither of those conditions are true, I suggest you use **`channels`** and a **`select`** statement instead.
 
 ![](img/waitgroup.png)
 ![](img/waitgroup-2.png)
@@ -444,7 +446,7 @@ Channels
 
 - Channels are extremely useful in programs of any size because of their ability to be composed together. 
 
-- Like a river, a channel serves as a conduit for a stream of information; values may be passed along the channel, and then read out downstream. 
+- Like a **river**, a channel serves as a conduit for a **stream of information**; values may be passed along the channel, and then read out downstream. 
 
 - For this reason I usually end my `chan` variable names with the word `Stream`. 
 
@@ -470,7 +472,7 @@ dataStream = make(chan interface{})
 
 ---
 
-You can't write a value onto a read-only channel, read a value from a write-only channel. 
+You can't write onto a read-only channel nor read from a write-only channel. 
 - You'll get an error at **compile time**.
 - As we’ll see later in this section, this is a powerful way to make declarations about our API and to build composable, logical programs that are easy to reason about.
 
@@ -654,7 +656,8 @@ intStream := make(chan int, 4)
 
 go func() {
 	defer close(intStream)
-	defer fmt.Fprintln(&stdoutBuff, "Producer Done.")
+    
+    defer fmt.Fprintln(&stdoutBuff, "Producer Done.")
 
     for i := 0; i < 5; i++ {
 		fmt.Fprintf(&stdoutBuff, "Sending: %d\n", i)
@@ -682,3 +685,46 @@ Received 3.
 Received 4.
 */
 ```
+
+---
+
+Result of channel operations given a channel’s state:
+- Note, the default value for a channel is `nil`
+
+
+<h5 style="text-align: center; color:brown">
+Read Operation
+</h5>
+
+|   Channel State    |          Result          |
+| ------------------ | ------------------------ |
+| `nil`              | Block                    |
+| Open and Not Empty | Value                    |
+| Open and Empty     | Block                    |
+| Closed             | `<default value>`, false |
+| Write Only         | Compilation Error        |
+
+
+<h5 style="text-align: center; color:brown">
+Write Operation
+</h5>
+
+|   Channel State   |      Result       |
+| ----------------- | ----------------- |
+| `nil`             | Block             |
+| Open and Full     | Block             |
+| Open and Not Full | Write Value       |
+| Closed            | panic             |
+| Receive Only      | Compilation Error |
+
+<h5 style="text-align: center; color:brown">
+Close Operation
+</h5>
+
+|   Channel State   |      Result       |
+| ----------------- | ----------------- |
+|`nil`|panic|
+|Open and Not Empty|Closes Channel; reads succeed until channel is drained,then reads produce default value|
+|Open and Empty|Closes Channel; reads produces default value|
+|Closed|panic|
+|Receive Only|Compilation Error|
