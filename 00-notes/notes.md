@@ -37,6 +37,16 @@ Chapter 1. An Introduction to Concurrency
 
 #### Why Is Concurrency Hard?
 
+There are 6 main reasons:
+1. **Race Conditions**
+2. **Atomicity**
+3. **Memory Access Synchronization**
+4. **Deadlocks**    
+5. **Livelocks**
+6. **Starvation**
+
+---
+
 1. **Race Conditions**
 
     - A race condition occurs when two or more operations must execute in the correct order, but the program has not been written so that this order is guaranteed.
