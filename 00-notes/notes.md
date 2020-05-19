@@ -996,3 +996,15 @@ The GOMAXPROCS Lever
 Go already automatically sets `GOMAXPROCS` tp the number of logical CPUs on the host machine.
 
 Do not tweak `GOMAXPROCS`; it will likely do more harm than good.
+
+
+
+
+---
+<h2 style="text-align: center;">
+Chapter 4. Concurrency Patterns in Go
+</h2>
+
+
+![](img/4-01.png)
+
