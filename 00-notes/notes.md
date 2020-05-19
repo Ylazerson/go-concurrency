@@ -117,7 +117,7 @@ There are 6 main reasons:
 6. **Starvation**
     - Starvation is any situation where a concurrent process cannot get all the resources it needs to perform work.
 
-    -  Livelocks warrant discussion separate from starvation because in a livelock, all the concurrent processes are starved equally, and no work is accomplished. More broadly, starvation usually implies that there are one or more greedy concurrent process that are unfairly preventing one or more concurrent processes from accomplishing work as efficiently as possible, or maybe at all.
+    - Livelocks warrant discussion separate from starvation because in a livelock, all the concurrent processes are starved equally, and no work is accomplished. More broadly, starvation usually implies that there are one or more *greedy* concurrent process that are unfairly preventing one or more concurrent processes from accomplishing work as efficiently as possible, or maybe at all.
 
     - One of the ways you can detect and solve starvation is by logging when work is accomplished, and then determining if your rate of work is as high as you expect it.
 
@@ -172,7 +172,7 @@ Concurrency is a property of the code; parallelism is a property of the running 
 
 ### CSP - Communicating Sequential Processes
 
-In this paper, Hoare suggests that **input** and **output** are two overlooked primitives of programming-particularly in concurrent code.
+In this paper, Hoare suggests that **input** and **output** are two overlooked primitives of programming - particularly in concurrent code.
 
 ![](img/csp.png)
 
@@ -200,9 +200,9 @@ Goroutines free us from having to think about our problem space in terms of para
 
 
 **Go’s philosophy on concurrency can be summed up like this**: 
-1. aim for simplicity
-2. use channels when possible
-3. treat goroutines like a free resource
+1. Aim for simplicity
+2. Use channels when possible
+3. Treat goroutines like a free resource
 
 
 
@@ -216,6 +216,24 @@ Goroutines free us from having to think about our problem space in terms of para
 Chapter 3. Go’s Concurrency Building Blocks
 </h2>
 
+The main ***good*** approach - share memory by communicating.
+1. Goroutines
+2. Channels
+    - `range`
+3. Select
+    - `time.After`
+
+The ***not good*** approach - communicating by sharing memory.
+- The `sync` Package
+    1. `sync.WaitGroup`
+    2. `sync.Mutex`
+    3. `sync.RWMutex`
+    4. `sync.NewCond`
+    5. `sync.Once`
+    6. `sync.Pool`
+
+---
+
 
 <h4 style="text-align: center; color:red">
 Goroutines
@@ -224,7 +242,7 @@ Goroutines
 
 - Every Go program has at least one goroutine: the main goroutine, which is automatically created and started when the process begins.
 
--  A goroutine is a function that is running concurrently (remember: not necessarily in parallel!) alongside other code.
+-  **A goroutine is a function that is running concurrently** (remember: not necessarily in parallel!) **alongside other code**.
 
 **Example 1.a:**
 ```go
@@ -721,7 +739,7 @@ defer stdoutBuff.WriteTo(os.Stdout)
 intStream := make(chan int, 4)
 
 go func() {
-	defer close(intStream)
+    defer close(intStream)
     
     defer fmt.Fprintln(&stdoutBuff, "Producer Done.")
 
@@ -826,6 +844,7 @@ Now, as a consumer of a channel, I only have to worry about two things:
 Let's show a clear example:
 
 ```go
+// return a read-only channel:
 chanOwner := func() <-chan int {
 
     // We’ll produce 6 results, so create a buffered channel of 5 so
